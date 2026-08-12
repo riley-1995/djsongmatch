@@ -6,6 +6,7 @@ import { SearchBar, SearchBarSection } from "./_components/SearchBarSection";
 import TableSection from "./_components/TableSection";
 import ClientOnly from "@/lib/ClientOnly";
 import { useSelectedSong } from "@/lib/hooks";
+import { useEffect } from "react";
 
 function NoSongSelected() {
   return (
@@ -19,6 +20,30 @@ function NoSongSelected() {
 }
 
 export function App() {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("resetState") !== "1") return;
+
+    localStorage.removeItem("selectedSong");
+    localStorage.removeItem("playlist");
+    localStorage.removeItem("yearFilter.startYear");
+    localStorage.removeItem("yearFilter.endYear");
+
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("slider.")) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    params.delete("resetState");
+    const queryString = params.toString();
+    const targetUrl = queryString
+      ? `${window.location.pathname}?${queryString}`
+      : window.location.pathname;
+
+    window.location.replace(targetUrl);
+  }, []);
+
   const { selectedSong } = useSelectedSong();
   if (selectedSong == undefined) {
     return <NoSongSelected />;

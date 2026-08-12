@@ -24,4 +24,4 @@ COPY . .
 EXPOSE 3000
 
 # Disable Turbopack for better Docker compatibility
-CMD ["pnpm", "dev"]
+CMD ["pnpm", "dev", "--hostname", "0.0.0.0"]
