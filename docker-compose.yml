@@ -1,66 +1,99 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-djsongmatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-djsongmatch}
+      POSTGRES_DB: ${POSTGRES_DB:-djsongmatch}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-djsongmatch} -d ${POSTGRES_DB:-djsongmatch}
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: nextjs_app
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      db:
+        condition: service_healthy
     volumes:
-      - ./frontend:/app/frontend
-      - /app/frontend/node_modules
-       - /app/frontend/.next
-      - ./.env:/app/.env
+      - .:/workspace
+      - frontend_node_modules:/workspace/frontend/node_modules
+      - frontend_next:/workspace/frontend/.next
+    working_dir: /workspace/frontend
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://backend:5001
-
-
-      - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
-      - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
-      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
-      - NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
-      - NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
-      - NEXT_PUBLIC_FIREBASE_APP_ID=${NEXT_PUBLIC_FIREBASE_APP_ID}
-      - WATCHPACK_POLLING=true
-      
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL:-postgresql://djsongmatch:djsongmatch@db:5432/djsongmatch}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:5001}
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY:-}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:-}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID:-}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:-}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:-}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID:-}
+      WATCHPACK_POLLING: "true"
+    command: sh -c "pnpm install && pnpm dev --hostname 0.0.0.0"
     networks:
       - app-network
-
 
   backend:
     build:
       context: .
       dockerfile: ./backend/Dockerfile
-    container_name: python_backend
     ports:
       - "5001:5001"
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
-      - ./.env:/app/.env
+      - .:/workspace
+    working_dir: /workspace
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - FLASK_ENV=development
-
-
-    env_file: ".env"
-
+      FLASK_ENV: development
+      DATABASE_URL: ${DATABASE_URL:-postgresql://djsongmatch:djsongmatch@db:5432/djsongmatch}
+      PYTHONUNBUFFERED: "1"
+    command: python -m backend.api
     networks:
       - app-network
 
   nginx:
     image: nginx:latest
-    container_name: nginx_proxy
     ports:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - frontend
+      frontend:
+        condition: service_started
     networks:
       - app-network
 
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  postgres_data:
+  frontend_node_modules:
+  frontend_next:
 
